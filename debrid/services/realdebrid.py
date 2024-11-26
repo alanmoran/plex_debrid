@@ -229,14 +229,34 @@ def check_if_cached(magnet):
     except Exception as e:
         ui_print(f"[realdebrid] Error(check_if_cached): {e}", ui_settings.debug)
 
-def delete_torrent(torrent_id):
+def delete_torrent(torrent_id, retry_count=0):
     headers = {'Authorization': f'Bearer {api_key}'}
     delete_url = f"https://api.real-debrid.com/rest/1.0/torrents/delete/{torrent_id}"
-    response = requests.delete(delete_url, headers=headers)
-    if response.status_code != 204:
-        print(f"Error deleting torrent {torrent_id}, status: {response.json()}")
-        time.sleep(1)
-        delete_torrent(torrent_id)
+    
+    try:
+        response = requests.delete(delete_url, headers=headers)
+        if response.status_code == 204:
+            return
+            
+        error_data = response.json()
+        if retry_count >= 5:
+            ui_print(f"[realdebrid] Failed to delete torrent {torrent_id} after 5 retries", ui_settings.debug)
+            return
+            
+        wait_time = min(2 ** retry_count, 32) # Exponential backoff capped at 32 seconds
+        if error_data.get('error') == 'too_many_requests':
+            ui_print(f"[realdebrid] Rate limited, waiting {wait_time}s before retry", ui_settings.debug)
+        else:
+            ui_print(f"[realdebrid] Error deleting torrent {torrent_id}, status: {error_data}", ui_settings.debug)
+            
+        time.sleep(wait_time)
+        delete_torrent(torrent_id, retry_count + 1)
+        
+    except Exception as e:
+        ui_print(f"[realdebrid] Error deleting torrent {torrent_id}: {str(e)}", ui_settings.debug)
+        if retry_count < 5:
+            time.sleep(min(2 ** retry_count, 32))
+            delete_torrent(torrent_id, retry_count + 1)
 
 async def fetch_with_executor(executor, func, *args, **kwargs):
     loop = asyncio.get_event_loop()

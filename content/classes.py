@@ -997,16 +997,13 @@ class media:
                                 release_date = release.release_date
                             elif datetime.datetime.strptime(release_date, '%Y-%m-%d') > datetime.datetime.strptime(release.release_date, '%Y-%m-%d'):
                                 release_date = release.release_date
-                    # If no release date was found, select the theatrical release date + 2 Month delay
+                    # If no release date was found, select the theatrical release date
                     if release_date == None:
                         for release in releases:
                             if release_date == None:
                                 release_date = release.release_date
                             elif datetime.datetime.strptime(release_date, '%Y-%m-%d') > datetime.datetime.strptime(release.release_date, '%Y-%m-%d'):
                                 release_date = release.release_date
-                        release_date = datetime.datetime.strptime(
-                            release_date, '%Y-%m-%d') + datetime.timedelta(days=60)
-                        release_date = release_date.strftime("%Y-%m-%d")
                     # Get trakt 'Latest HD/4k Releases' Lists to accept early releases
                     match = False
                     if trakt.early_releases == "true":
@@ -1604,6 +1601,7 @@ class media:
         if lowest <= season_releases:
             return True
         return False
+
 
 
 def download(cls, library, parentReleases, result, index):
