@@ -150,28 +150,60 @@ def download(element, stream=True, query='', force=False):
                                 ui_print('[realdebrid] error: could not add magnet for release: ' + release.title, ui_settings.debug)
                                 continue
                             response = post('https://api.real-debrid.com/rest/1.0/torrents/selectFiles/' + torrent_id,{'files': str(','.join(cached_ids))})
-                            response = get('https://api.real-debrid.com/rest/1.0/torrents/info/' + torrent_id)
-                            actual_title = ""
-                            if len(response.links) == len(cached_ids):
-                                actual_title = response.filename
-                                release.download = response.links
-                            else:
-                                if response.status in ["queued","magnet_conversion","downloading","uploading"]:
-                                    if hasattr(element,"version"):
-                                        debrid_uncached = True
-                                        for i,rule in enumerate(element.version.rules):
-                                            if (rule[0] == "cache status") and (rule[1] == 'requirement' or rule[1] == 'preference') and (rule[2] == "cached"):
-                                                debrid_uncached = False
-                                        if debrid_uncached:
-                                            import debrid as db
-                                            release.files = version.files
-                                            db.downloading += [element.query() + ' [' + element.version.name + ']']
-                                            ui_print('[realdebrid] adding uncached release: ' + release.title)
-                                            return True
+                            try:
+                                response = get('https://api.real-debrid.com/rest/1.0/torrents/info/' + torrent_id)
+                                ui_print(f"[realdebrid] Torrent info response: {vars(response)}")
+                                
+                                if hasattr(response, 'status'):
+                                    ui_print(f"[realdebrid] Torrent status: {response.status}")
+                                    
+                                    if response.status in ["magnet_conversion", "queued", "downloading", "uploading"]:
+                                        ui_print(f"[realdebrid] Torrent is still processing: {response.status}")
+                                        if hasattr(element, "version"):
+                                            debrid_uncached = True
+                                            for i, rule in enumerate(element.version.rules):
+                                                if (rule[0] == "cache status") and (rule[1] == 'requirement' or rule[1] == 'preference') and (rule[2] == "cached"):
+                                                    debrid_uncached = False
+                                            if debrid_uncached:
+                                                import debrid as db
+                                                release.files = version.files
+                                                db.downloading += [element.query() + ' [' + element.version.name + ']']
+                                                ui_print('[realdebrid] adding uncached release: ' + release.title)
+                                                return True
+                                        delete_torrent(torrent_id)
+                                        continue
+                                
+                                if hasattr(response, 'links'):
+                                    if len(response.links) == len(cached_ids):
+                                        actual_title = response.filename
+                                        release.download = response.links
+                                    else:
+                                        ui_print(f"[realdebrid] Warning: Number of links ({len(response.links) if hasattr(response, 'links') else 0}) doesn't match cached_ids ({len(cached_ids)})")
+                                        if response.status in ["queued", "magnet_conversion", "downloading", "uploading"]:
+                                            if hasattr(element,"version"):
+                                                debrid_uncached = True
+                                                for i,rule in enumerate(element.version.rules):
+                                                    if (rule[0] == "cache status") and (rule[1] == 'requirement' or rule[1] == 'preference') and (rule[2] == "cached"):
+                                                        debrid_uncached = False
+                                                if debrid_uncached:
+                                                    import debrid as db
+                                                    release.files = version.files
+                                                    db.downloading += [element.query() + ' [' + element.version.name + ']']
+                                                    ui_print('[realdebrid] adding uncached release: ' + release.title)
+                                                    return True
+                                        else:
+                                            ui_print('[realdebrid] error: selecting this cached file combination returned a .rar archive - trying a different file combination.')
+                                            delete_torrent(torrent_id)
+                                            continue
                                 else:
-                                    ui_print('[realdebrid] error: selecting this cached file combination returned a .rar archive - trying a different file combination.', ui_settings.debug)
+                                    ui_print(f"[realdebrid] Error: Response missing 'links' attribute. Full response data: {vars(response)}")
+                                    ui_print(f"[realdebrid] Available attributes: {dir(response)}")
                                     delete_torrent(torrent_id)
                                     continue
+                            except Exception as e:
+                                ui_print(f"[realdebrid] Error processing torrent response: {str(e)}")
+                                delete_torrent(torrent_id)
+                                continue
                             if len(release.download) > 0:
                                 for link in release.download:
                                     try:
